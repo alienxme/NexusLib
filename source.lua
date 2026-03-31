@@ -1580,56 +1580,87 @@ end
 function Window:NewTab(name, icon)
     local T = self._theme
 
-    -- Tab button
+    -- ── Tab button container ──────────────────────────────────────────────────
     local tabBtn = Instance.new("TextButton")
     tabBtn.Name             = "Tab_" .. name
-    tabBtn.Text             = (icon and (icon .. "  ") or "") .. name
-    tabBtn.TextSize         = 12
-    tabBtn.Font             = Enum.Font.GothamMedium
-    tabBtn.TextXAlignment   = Enum.TextXAlignment.Left
-    tabBtn.TextColor3       = T.TextSecondary
+    tabBtn.Text             = ""           -- text is in a child label, not on the button itself
     tabBtn.BackgroundColor3 = T.TabUnselected
     tabBtn.BorderSizePixel  = 0
     tabBtn.Size             = UDim2.new(1, -4, 0, 32)
     tabBtn.LayoutOrder      = #self._tabs + 1
     tabBtn.Parent           = self._tabScroll
     MakeCorner(tabBtn, 6)
-    MakePadding(tabBtn, 0, 0, 18, 6)   -- 18px left keeps text clear of the 3px indicator + gap
 
-    -- Active indicator: sits 4px from left (inside rounded corner), vertically centred
+    -- Active indicator — parented to the button but uses absolute pixel offset
+    -- so it is completely independent of any UIPadding.
     local indicator = Instance.new("Frame")
     indicator.AnchorPoint      = Vector2.new(0, 0.5)
-    indicator.Position         = UDim2.new(0, 4, 0.5, 0)
+    indicator.Position         = UDim2.new(0, 5, 0.5, 0)   -- 5 px from left, clear of the rounded corner
     indicator.Size             = UDim2.new(0, 3, 0.55, 0)
     indicator.BackgroundColor3 = T.Accent
     indicator.BorderSizePixel  = 0
-    indicator.ZIndex           = 3
+    indicator.ZIndex           = 4
     indicator.Visible          = false
     indicator.Parent           = tabBtn
     MakeCorner(indicator, 2)
 
+    -- Separate TextLabel for the tab name — padded independently of the indicator.
+    -- Left padding (14px) starts after the 5px indicator position + 3px width + 6px gap.
+    local tabLbl = Instance.new("TextLabel")
+    tabLbl.BackgroundTransparency = 1
+    tabLbl.Size                   = UDim2.new(1, 0, 1, 0)
+    tabLbl.Position               = UDim2.new(0, 0, 0, 0)
+    tabLbl.Text                   = (icon and (icon .. "  ") or "") .. name
+    tabLbl.TextSize               = 12
+    tabLbl.Font                   = Enum.Font.GothamMedium
+    tabLbl.TextXAlignment         = Enum.TextXAlignment.Left
+    tabLbl.TextColor3             = T.TextSecondary
+    tabLbl.ZIndex                 = 3
+    tabLbl.Parent                 = tabBtn
+    MakePadding(tabLbl, 0, 0, 16, 6)   -- 16px left clears the 3px bar + margins cleanly
+
     local tab = Tab.new(self._bodyContainer, T)
     tab._btn       = tabBtn
-    tab._indicator = indicator  -- store reference so SelectTab can reach it safely
+    tab._lbl       = tabLbl
+    tab._indicator = indicator
+
+    local isSelected = false   -- tracks this tab's selected state for hover logic
 
     local function SelectTab()
-        -- Deselect all
+        -- Deselect all tabs
         for _, t in ipairs(self._tabs) do
+            t._isSelected = false
             Tween(t._btn, {BackgroundColor3 = T.TabUnselected}, 0.12)
-            t._btn.TextColor3  = T.TextSecondary
+            t._lbl.TextColor3    = T.TextSecondary
             t._indicator.Visible = false
-            t._frame.Visible   = false
+            t._frame.Visible     = false
         end
-        -- Select this
+        -- Select this tab
+        isSelected        = true
+        tab._isSelected   = true
         Tween(tabBtn, {BackgroundColor3 = T.TabSelected}, 0.12)
-        tabBtn.TextColor3  = T.TextPrimary
+        tabLbl.TextColor3  = T.TextPrimary
         indicator.Visible  = true
         tab._frame.Visible = true
         self._activeTab    = tab
     end
 
+    -- State-aware hover: only apply hover colour when the tab is NOT selected.
+    -- On MouseLeave, restore to whichever colour is correct for the current state.
+    tabBtn.MouseEnter:Connect(function()
+        if not tab._isSelected then
+            Tween(tabBtn, {BackgroundColor3 = T.ElementHover}, 0.12)
+        end
+    end)
+    tabBtn.MouseLeave:Connect(function()
+        if not tab._isSelected then
+            Tween(tabBtn, {BackgroundColor3 = T.TabUnselected}, 0.12)
+        else
+            Tween(tabBtn, {BackgroundColor3 = T.TabSelected}, 0.12)
+        end
+    end)
+
     tabBtn.MouseButton1Click:Connect(SelectTab)
-    HoverEffect(tabBtn, T.TabUnselected, T.ElementHover)
 
     table.insert(self._tabs, tab)
     table.insert(self._tabBtns, tabBtn)
