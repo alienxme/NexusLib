@@ -679,12 +679,17 @@ function Section:NewSlider(opts)
     end
 
     local sliding = false
-    track.InputBegan:Connect(function(input)
+
+    local function BeginSlide(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
             or input.UserInputType == Enum.UserInputType.Touch then
             sliding = true
         end
-    end)
+    end
+    -- Connect to both track and knob so clicking the knob itself also starts sliding
+    track.InputBegan:Connect(BeginSlide)
+    knob.InputBegan:Connect(BeginSlide)
+
     UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
             or input.UserInputType == Enum.UserInputType.Touch then
@@ -1590,6 +1595,15 @@ function Window:NewTab(name, icon)
     tabBtn.LayoutOrder      = #self._tabs + 1
     tabBtn.Parent           = self._tabScroll
     MakeCorner(tabBtn, 6)
+    -- Patch the right-side corners back to square so the button sits flush
+    -- against the content divider without protruding rounded arcs.
+    local tabBtnPatch = Instance.new("Frame")
+    tabBtnPatch.BackgroundColor3 = tabBtn.BackgroundColor3
+    tabBtnPatch.BorderSizePixel  = 0
+    tabBtnPatch.Position         = UDim2.new(1, -6, 0, 0)
+    tabBtnPatch.Size             = UDim2.new(0, 6, 1, 0)
+    tabBtnPatch.ZIndex           = 2
+    tabBtnPatch.Parent           = tabBtn
 
     -- Active indicator — parented to the button but uses absolute pixel offset
     -- so it is completely independent of any UIPadding.
@@ -1623,6 +1637,7 @@ function Window:NewTab(name, icon)
     tab._btn       = tabBtn
     tab._lbl       = tabLbl
     tab._indicator = indicator
+    tab._patch     = tabBtnPatch
 
     local isSelected = false   -- tracks this tab's selected state for hover logic
 
@@ -1630,7 +1645,8 @@ function Window:NewTab(name, icon)
         -- Deselect all tabs
         for _, t in ipairs(self._tabs) do
             t._isSelected = false
-            Tween(t._btn, {BackgroundColor3 = T.TabUnselected}, 0.12)
+            Tween(t._btn,   {BackgroundColor3 = T.TabUnselected}, 0.12)
+            Tween(t._patch, {BackgroundColor3 = T.TabUnselected}, 0.12)
             t._lbl.TextColor3    = T.TextSecondary
             t._indicator.Visible = false
             t._frame.Visible     = false
@@ -1638,7 +1654,8 @@ function Window:NewTab(name, icon)
         -- Select this tab
         isSelected        = true
         tab._isSelected   = true
-        Tween(tabBtn, {BackgroundColor3 = T.TabSelected}, 0.12)
+        Tween(tabBtn,      {BackgroundColor3 = T.TabSelected}, 0.12)
+        Tween(tabBtnPatch, {BackgroundColor3 = T.TabSelected}, 0.12)
         tabLbl.TextColor3  = T.TextPrimary
         indicator.Visible  = true
         tab._frame.Visible = true
@@ -1647,16 +1664,20 @@ function Window:NewTab(name, icon)
 
     -- State-aware hover: only apply hover colour when the tab is NOT selected.
     -- On MouseLeave, restore to whichever colour is correct for the current state.
+    -- The patch frame is kept in sync so the right edge always matches the button.
     tabBtn.MouseEnter:Connect(function()
         if not tab._isSelected then
-            Tween(tabBtn, {BackgroundColor3 = T.ElementHover}, 0.12)
+            Tween(tabBtn,      {BackgroundColor3 = T.ElementHover}, 0.12)
+            Tween(tabBtnPatch, {BackgroundColor3 = T.ElementHover}, 0.12)
         end
     end)
     tabBtn.MouseLeave:Connect(function()
         if not tab._isSelected then
-            Tween(tabBtn, {BackgroundColor3 = T.TabUnselected}, 0.12)
+            Tween(tabBtn,      {BackgroundColor3 = T.TabUnselected}, 0.12)
+            Tween(tabBtnPatch, {BackgroundColor3 = T.TabUnselected}, 0.12)
         else
-            Tween(tabBtn, {BackgroundColor3 = T.TabSelected}, 0.12)
+            Tween(tabBtn,      {BackgroundColor3 = T.TabSelected}, 0.12)
+            Tween(tabBtnPatch, {BackgroundColor3 = T.TabSelected}, 0.12)
         end
     end)
 
@@ -1701,21 +1722,24 @@ end
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- DEMO  (remove or comment out when distributing as a library)
+-- Usage mirrors the public API exactly — no Rayfield or Kavo calls here.
 -- ─────────────────────────────────────────────────────────────────────────────
 --[[
-local Window = NexusLib:CreateWindow({
+local Nexus = NexusLib   -- when running inline; replace with loadstring(game:HttpGet(...))() when hosted
+
+local Win = Nexus:CreateWindow({
     Title    = "Nexus Library",
     Subtitle = "v1.0.0  •  Demo",
-    Theme    = "Dark",       -- Dark | Light | Midnight | Crimson | Ocean
+    Theme    = "Dark",       -- "Dark" | "Light" | "Midnight" | "Crimson" | "Ocean"
     Size     = {560, 420},
 })
 
-local MainTab = Window:NewTab("🏠  Main")
-local PlayerTab = Window:NewTab("👤  Player")
-local VisualTab = Window:NewTab("👁  Visual")
-local SettingsTab = Window:NewTab("⚙  Settings")
+local MainTab     = Win:NewTab("🏠  Main")
+local PlayerTab   = Win:NewTab("👤  Player")
+local VisualTab   = Win:NewTab("👁  Visual")
+local SettingsTab = Win:NewTab("⚙  Settings")
 
--- Main Tab
+-- ── Main Tab ──────────────────────────────────────────────────────────────────
 local infoSec = MainTab:NewSection("Information")
 infoSec:NewLabel({ Name = "Welcome to Nexus UI Library!" })
 infoSec:NewLabel({ Name = "Version: <b>1.0.0</b>  •  <font color='#8080FF'>Open Source</font>", Color = Color3.fromRGB(160,160,200) })
@@ -1723,128 +1747,141 @@ infoSec:NewSeparator()
 
 local actionSec = MainTab:NewSection("Actions")
 actionSec:NewButton({
-    Name = "Print Hello",
-    Description = "Prints 'Hello, World!' to the console",
-    Callback = function() print("Hello, World!") end
+    Name        = "Print Hello",
+    Description = "Prints Hello World to the output",
+    Callback    = function() print("Hello, World!") end,
 })
 actionSec:NewButton({
-    Name = "Send Notification",
+    Name     = "Send Notification",
     Callback = function()
-        NexusLib:Notify({
-            Title = "Nexus Notification",
+        Nexus:Notify({
+            Title       = "Nexus Notification",
             Description = "This is a test notification from the demo!",
-            Duration = 5,
+            Duration    = 5,
         })
-    end
+    end,
 })
 
--- Player Tab
+-- ── Player Tab ────────────────────────────────────────────────────────────────
 local moveSec = PlayerTab:NewSection("Movement")
 moveSec:NewSlider({
-    Name = "Walk Speed",
-    Range = {16, 150},
-    Increment = 1,
+    Name         = "Walk Speed",
+    Range        = {16, 150},
+    Increment    = 1,
     CurrentValue = 16,
-    Flag = "WalkSpeed",
-    Suffix = " studs/s",
-    Callback = function(v)
+    Flag         = "WalkSpeed",
+    Suffix       = " studs/s",
+    Callback     = function(v)
         local char = game.Players.LocalPlayer.Character
         if char and char:FindFirstChild("Humanoid") then
             char.Humanoid.WalkSpeed = v
         end
-    end
+    end,
 })
 moveSec:NewSlider({
-    Name = "Jump Power",
-    Range = {0, 200},
-    Increment = 5,
+    Name         = "Jump Power",
+    Range        = {0, 200},
+    Increment    = 5,
     CurrentValue = 50,
-    Flag = "JumpPower",
-    Callback = function(v)
+    Flag         = "JumpPower",
+    Callback     = function(v)
         local char = game.Players.LocalPlayer.Character
         if char and char:FindFirstChild("Humanoid") then
             char.Humanoid.JumpPower = v
         end
-    end
+    end,
 })
 moveSec:NewToggle({
-    Name = "Fly",
-    Description = "Enable flight",
+    Name         = "Fly",
     CurrentValue = false,
-    Flag = "FlyEnabled",
-    Callback = function(state)
+    Flag         = "FlyEnabled",
+    Callback     = function(state)
         print("Fly:", state)
-    end
+    end,
 })
 
 local toolSec = PlayerTab:NewSection("Tools")
 toolSec:NewKeybind({
-    Name = "Toggle UI",
-    DefaultKeybind = Enum.KeyCode.RightShift,
-    Flag = "UIToggle",
-    Callback = function()
-        Window:ToggleUI()
-    end
+    Name           = "Toggle UI",
+    CurrentKeybind = Enum.KeyCode.RightShift,
+    Flag           = "UIToggle",
+    Callback       = function()
+        Win:ToggleUI()
+    end,
 })
 toolSec:NewInput({
-    Name = "Custom Message",
-    PlaceholderText = "Type something...",
-    Flag = "Message",
-    Callback = function(text)
+    Name                    = "Custom Message",
+    PlaceholderText         = "Type something...",
+    RemoveTextAfterFocusLost = false,
+    Flag                    = "Message",
+    Callback                = function(text)
         print("Message:", text)
-    end
+    end,
 })
 
--- Visual Tab
+-- ── Visual Tab ────────────────────────────────────────────────────────────────
 local colorSec = VisualTab:NewSection("Colors")
 colorSec:NewColorPicker({
-    Name = "Highlight Color",
-    Color = Color3.fromRGB(100, 100, 255),
-    Flag = "HighlightColor",
+    Name     = "Highlight Color",
+    Color    = Color3.fromRGB(100, 100, 255),
+    Flag     = "HighlightColor",
     Callback = function(color)
         print("Color changed:", color)
-    end
+    end,
 })
 
 local dropSec = VisualTab:NewSection("Options")
 dropSec:NewDropdown({
-    Name = "Theme",
-    Options = {"Dark", "Light", "Midnight", "Crimson", "Ocean"},
+    Name          = "Theme",
+    Options       = {"Dark", "Light", "Midnight", "Crimson", "Ocean"},
     CurrentOption = {"Dark"},
-    Flag = "SelectedTheme",
-    Callback = function(opts)
-        print("Selected theme:", opts[1])
-    end
+    Flag          = "SelectedTheme",
+    Callback      = function(option)
+        -- option is a table; option[1] holds the chosen string (single-select)
+        print("Selected theme:", option[1])
+    end,
 })
 dropSec:NewDropdown({
-    Name = "Effects",
-    Options = {"Bloom", "Blur", "Sunrays", "Depth of Field"},
+    Name            = "Effects",
+    Options         = {"Bloom", "Blur", "Sunrays", "Depth of Field"},
     MultipleOptions = true,
-    CurrentOption = {},
-    Flag = "Effects",
-    Callback = function(selected)
+    CurrentOption   = {},
+    Flag            = "Effects",
+    Callback        = function(selected)
+        -- selected is a table of all currently chosen strings (multi-select)
         print("Effects:", table.concat(selected, ", "))
-    end
+    end,
 })
 
--- Settings Tab
+-- ── Settings Tab ──────────────────────────────────────────────────────────────
 local configSec = SettingsTab:NewSection("Configuration")
 configSec:NewToggle({
-    Name = "Auto-Save Config",
+    Name         = "Auto-Save Config",
     CurrentValue = true,
-    Flag = "AutoSave",
+    Flag         = "AutoSave",
+    Callback     = function(state)
+        print("Auto-save:", state)
+    end,
 })
 configSec:NewToggle({
-    Name = "Show Notifications",
+    Name         = "Show Notifications",
     CurrentValue = true,
-    Flag = "ShowNotifs",
+    Flag         = "ShowNotifs",
+    Callback     = function(state)
+        print("Show notifs:", state)
+    end,
 })
 configSec:NewButton({
-    Name = "Reset to Defaults",
+    Name        = "Reset to Defaults",
     Description = "Clears all saved configuration",
-    Callback = function()
-        NexusLib:Notify({ Title = "Config Reset", Description = "All settings have been reset.", AccentColor = Color3.fromRGB(220,80,80) })
-    end
+    Callback    = function()
+        Nexus:Notify({
+            Title       = "Config Reset",
+            Description = "All settings have been reset to their defaults.",
+            AccentColor = Color3.fromRGB(220, 80, 80),
+            Duration    = 4,
+        })
+    end,
 })
 ]]
 
