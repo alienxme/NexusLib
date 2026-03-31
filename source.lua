@@ -1510,12 +1510,25 @@ function NexusLib:CreateWindow(opts)
 
     -- ── Tab Bar ──────────────────────────────────────────────────────────────
     local tabBar = Instance.new("Frame")
-    tabBar.Name             = "TabBar"
-    tabBar.BackgroundColor3 = T.TabBar
-    tabBar.BorderSizePixel  = 0
-    tabBar.Position         = UDim2.new(0, 0, 0, 38)
-    tabBar.Size             = UDim2.new(0, 130, 1, -38)
-    tabBar.Parent           = mainFrame
+    tabBar.Name               = "TabBar"
+    tabBar.BackgroundColor3   = T.TabBar
+    tabBar.BorderSizePixel    = 0
+    tabBar.Position           = UDim2.new(0, 0, 0, 38)
+    tabBar.Size               = UDim2.new(0, 130, 1, -38)
+    tabBar.ClipsDescendants   = true
+    tabBar.Parent             = mainFrame
+    -- Round only the bottom-left corner to match the window edge.
+    -- Full UICorner + a patch strip on the right side squares off the right corners.
+    local tbBarCorner = Instance.new("UICorner")
+    tbBarCorner.CornerRadius = UDim.new(0, 10)
+    tbBarCorner.Parent       = tabBar
+    local tbBarPatch = Instance.new("Frame")
+    tbBarPatch.BackgroundColor3 = T.TabBar
+    tbBarPatch.BorderSizePixel  = 0
+    tbBarPatch.Position         = UDim2.new(1, -10, 0, 0)
+    tbBarPatch.Size             = UDim2.new(0, 10, 1, 0)
+    tbBarPatch.ZIndex           = 2
+    tbBarPatch.Parent           = tabBar
 
     local tabScroll = Instance.new("ScrollingFrame")
     tabScroll.BackgroundTransparency  = 1
@@ -1581,15 +1594,16 @@ function Window:NewTab(name, icon)
     tabBtn.LayoutOrder      = #self._tabs + 1
     tabBtn.Parent           = self._tabScroll
     MakeCorner(tabBtn, 6)
-    MakePadding(tabBtn, 0, 0, 10, 6)
+    MakePadding(tabBtn, 0, 0, 18, 6)   -- 18px left keeps text clear of the 3px indicator + gap
 
-    -- Active indicator
+    -- Active indicator: sits 4px from left (inside rounded corner), vertically centred
     local indicator = Instance.new("Frame")
     indicator.AnchorPoint      = Vector2.new(0, 0.5)
-    indicator.Position         = UDim2.new(0, 0, 0.5, 0)
-    indicator.Size             = UDim2.new(0, 3, 0.6, 0)
+    indicator.Position         = UDim2.new(0, 4, 0.5, 0)
+    indicator.Size             = UDim2.new(0, 3, 0.55, 0)
     indicator.BackgroundColor3 = T.Accent
     indicator.BorderSizePixel  = 0
+    indicator.ZIndex           = 3
     indicator.Visible          = false
     indicator.Parent           = tabBtn
     MakeCorner(indicator, 2)
