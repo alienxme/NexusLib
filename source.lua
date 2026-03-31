@@ -22,7 +22,6 @@
 -- Services
 -- ─────────────────────────────────────────────────────────────────────────────
 local Players          = game:GetService("Players")
-local RunService       = game:GetService("RunService")
 local TweenService     = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local CoreGui          = game:GetService("CoreGui")
@@ -469,7 +468,7 @@ end
 -- ─────────────────────────────────────────────────────────────────────────────
 function Section:NewButton(opts)
     if type(opts) == "string" then
-        opts = { Name = opts, Callback = select(2, ...) }
+        opts = { Name = opts }
     end
     opts = opts or {}
     local T = self._theme
@@ -531,7 +530,7 @@ end
 -- ─────────────────────────────────────────────────────────────────────────────
 function Section:NewToggle(opts)
     if type(opts) == "string" then
-        opts = { Name = opts, Callback = select(3, ...) }
+        opts = { Name = opts }
     end
     opts = opts or {}
     local T    = self._theme
@@ -734,7 +733,13 @@ function Section:NewInput(opts)
     inputFrame.Size             = UDim2.new(1, 0, 0, 26)
     inputFrame.Parent           = row
     MakeCorner(inputFrame, 5)
-    MakeStroke(inputFrame, T.Border, 1)
+
+    -- Single persistent stroke — colour tweened on focus/blur
+    local inputStroke = Instance.new("UIStroke")
+    inputStroke.Color             = T.Border
+    inputStroke.Thickness         = 1
+    inputStroke.ApplyStrokeMode   = Enum.ApplyStrokeMode.Border
+    inputStroke.Parent            = inputFrame
 
     local box = Instance.new("TextBox")
     box.BackgroundTransparency  = 1
@@ -751,11 +756,10 @@ function Section:NewInput(opts)
     box.Parent                  = inputFrame
 
     box.Focused:Connect(function()
-        Tween(inputFrame, {}, 0.12)
-        MakeStroke(inputFrame, T.Accent, 1)
+        Tween(inputStroke, {Color = T.Accent}, 0.12)
     end)
-    box.FocusLost:Connect(function(enter)
-        MakeStroke(inputFrame, T.Border, 1)
+    box.FocusLost:Connect(function()
+        Tween(inputStroke, {Color = T.Border}, 0.12)
         if flag then NexusLib.Flags[flag] = box.Text end
         if opts.Callback then task.spawn(opts.Callback, box.Text) end
         if opts.RemoveTextAfterFocusLost then box.Text = "" end
@@ -1591,22 +1595,23 @@ function Window:NewTab(name, icon)
     MakeCorner(indicator, 2)
 
     local tab = Tab.new(self._bodyContainer, T)
-    tab._btn = tabBtn
+    tab._btn       = tabBtn
+    tab._indicator = indicator  -- store reference so SelectTab can reach it safely
 
     local function SelectTab()
         -- Deselect all
         for _, t in ipairs(self._tabs) do
             Tween(t._btn, {BackgroundColor3 = T.TabUnselected}, 0.12)
-            t._btn.TextColor3 = T.TextSecondary
-            t._btn:FindFirstChild("Frame").Visible = false
-            t._frame.Visible = false
+            t._btn.TextColor3  = T.TextSecondary
+            t._indicator.Visible = false
+            t._frame.Visible   = false
         end
         -- Select this
         Tween(tabBtn, {BackgroundColor3 = T.TabSelected}, 0.12)
-        tabBtn.TextColor3 = T.TextPrimary
-        indicator.Visible = true
+        tabBtn.TextColor3  = T.TextPrimary
+        indicator.Visible  = true
         tab._frame.Visible = true
-        self._activeTab = tab
+        self._activeTab    = tab
     end
 
     tabBtn.MouseButton1Click:Connect(SelectTab)
